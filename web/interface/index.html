@@ -25,7 +25,7 @@
       <nav class="tabs" aria-label="Dashboard tabs">
         <button class="tab-button active" data-tab="map-tab">Map</button>
         <button class="tab-button" data-tab="findings-tab">Findings</button>
-        <button class="tab-button" data-tab="tab-3">Forecasting</button>
+        <button class="tab-button" data-tab="inferences-tab">Inferences</button>
       </nav>
 
       <main class="tab-panels">
@@ -81,9 +81,33 @@
           </div>
         </section>
 
-        <section id="tab-3" class="tab-panel placeholder-panel">
-          <h2>Forecasting</h2>
-          <p>Reserved for scenario planning and lifecycle cost projections.</p>
+        <section id="inferences-tab" class="tab-panel inferences-panel">
+          <div class="inferences-header">
+            <h2>Inferences</h2>
+            <p id="inferences-note">Model performance and predicted behavior for unknown-EoL devices.</p>
+          </div>
+          <div class="inference-artifacts">
+            <section class="artifact-card artifact-wide">
+              <h3>Model Performance Snapshot</h3>
+              <img
+                id="model-performance-image"
+                src="/reports/model_performance.png"
+                alt="Model performance summary"
+                loading="lazy"
+              >
+            </section>
+          </div>
+          <div id="inferences-kpis" class="kpi-grid"></div>
+          <div class="inferences-grid">
+            <section class="viz-card">
+              <h3>Predicted Behavior Mix (Unknown EoL Devices)</h3>
+              <div id="viz-inference-class-mix" class="viz-frame"></div>
+            </section>
+            <section class="viz-card">
+              <h3>Model Hotspots by Predicted At-Risk Count</h3>
+              <div id="viz-inference-model-risk" class="viz-frame"></div>
+            </section>
+          </div>
         </section>
       </main>
     </div>

@@ -2,14 +2,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import mimetypes
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .data_service import get_cluster_payload, get_findings_payload, get_location_summary_with_horizon
+from .data_service import (
+    get_cluster_payload,
+    get_findings_payload,
+    get_inferences_payload,
+    get_location_summary_with_horizon,
+)
 
 
 INTERFACE_DIR = Path(__file__).resolve().parents[1] / 'interface'
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+REPORTS_DIR = PROJECT_ROOT / 'reports'
 
 
 class DashboardRequestHandler(SimpleHTTPRequestHandler):
@@ -25,6 +33,15 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         if parsed_url.path.startswith('/api/'):
             self._handle_api(parsed_url)
 
+            return
+
+        if parsed_url.path.startswith('/reports/'):
+            relative = parsed_url.path.removeprefix('/reports/').lstrip('/')
+            candidate = (REPORTS_DIR / relative).resolve()
+            if candidate.is_file() and candidate.is_relative_to(REPORTS_DIR.resolve()):
+                self._serve_file(candidate)
+                return
+            self.send_error(404, 'File not found.')
             return
 
         if parsed_url.path in {'', '/'}:
@@ -55,6 +72,12 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
                 if horizon_raw is not None and str(horizon_raw).strip():
                     horizon_days = int(str(horizon_raw).strip())
                 payload = get_findings_payload(horizon_days=horizon_days)
+                self._write_json(payload)
+
+                return
+
+            if parsed_url.path == '/api/inferences':
+                payload = get_inferences_payload()
                 self._write_json(payload)
 
                 return
@@ -103,6 +126,15 @@ class DashboardRequestHandler(SimpleHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _serve_file(self, path: Path) -> None:
+        data = path.read_bytes()
+        content_type, _ = mimetypes.guess_type(path.name)
+        self.send_response(200)
+        self.send_header('Content-Type', content_type or 'application/octet-stream')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
 
 def run_dashboard_server(host: str = '127.0.0.1', port: int = 8765) -> None:

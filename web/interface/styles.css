@@ -337,6 +337,14 @@ body {
   display: block;
 }
 
+.inferences-panel {
+  display: none;
+}
+
+.inferences-panel.active {
+  display: block;
+}
+
 .findings-header h2 {
   margin: 0;
 }
@@ -345,6 +353,44 @@ body {
   margin: 4px 0 0;
   color: #4f5d54;
   font-size: 0.92rem;
+}
+
+.inferences-header h2 {
+  margin: 0;
+}
+
+.inferences-header p {
+  margin: 4px 0 0;
+  color: #4f5d54;
+  font-size: 0.92rem;
+}
+
+.inference-artifacts {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.artifact-card {
+  border: 1px solid #ced9d1;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 9px;
+}
+
+.artifact-card h3 {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+}
+
+.artifact-card img {
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border: 1px solid #d8e2da;
+  border-radius: 8px;
+  background: #f9fcf8;
 }
 
 .kpi-grid {
@@ -374,6 +420,13 @@ body {
 }
 
 .findings-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inferences-grid {
   margin-top: 12px;
   display: grid;
   gap: 10px;
@@ -412,6 +465,10 @@ body {
 
 @media (max-width: 1024px) {
   .findings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inferences-grid {
     grid-template-columns: 1fr;
   }
 

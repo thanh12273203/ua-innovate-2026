@@ -2,6 +2,7 @@ const API = {
   clusters: '/api/clusters',
   summary: '/api/location-summary',
   findings: '/api/findings',
+  inferences: '/api/inferences',
 };
 
 const HORIZON_DAYS = 365;
@@ -97,6 +98,7 @@ let hoverRequestToken = 0;
 let highlightedMarker = null;
 let highlightedMarkerBaseStyle = null;
 let findingsLoaded = false;
+let inferencesLoaded = false;
 
 const scopeTitle = document.getElementById('scope-title');
 const scopeSubtitle = document.getElementById('scope-subtitle');
@@ -104,6 +106,9 @@ const resetButton = document.getElementById('reset-map-btn');
 const summaryContent = document.getElementById('summary-content');
 const findingsNote = document.getElementById('findings-note');
 const findingsKpis = document.getElementById('findings-kpis');
+const inferencesNote = document.getElementById('inferences-note');
+const inferencesKpis = document.getElementById('inferences-kpis');
+const modelPerformanceImage = document.getElementById('model-performance-image');
 
 function setupTabs() {
   const buttons = Array.from(document.querySelectorAll('.tab-button'));
@@ -120,6 +125,13 @@ function setupTabs() {
         loadFindings().catch((error) => {
           if (findingsNote) {
             findingsNote.textContent = `Unable to load findings: ${error.message}`;
+          }
+        });
+      }
+      if (targetId === 'inferences-tab' && !inferencesLoaded) {
+        loadInferences().catch((error) => {
+          if (inferencesNote) {
+            inferencesNote.textContent = `Unable to load inferences: ${error.message}`;
           }
         });
       }
@@ -273,6 +285,16 @@ function formatCurrency(value) {
     currency: 'USD',
     maximumFractionDigits: 0,
   });
+}
+
+function formatPercent(value, fractionDigits = 1) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 'N/A';
+  }
+  return `${Number(value).toLocaleString(undefined, {
+    maximumFractionDigits: fractionDigits,
+    minimumFractionDigits: fractionDigits,
+  })}%`;
 }
 
 function setVizEmpty(containerId, message) {
@@ -453,6 +475,123 @@ async function loadFindings() {
   const findings = await fetchJson(`${API.findings}?${query.toString()}`);
   renderFindings(findings);
   findingsLoaded = true;
+}
+
+function renderInferencesKpis(kpis) {
+  if (!inferencesKpis) {
+    return;
+  }
+  inferencesKpis.innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">Unknown-EoL Devices Scored</div><div class="kpi-value">${formatNumber(kpis.total_scored)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Predicted Passed EoL (-1)</div><div class="kpi-value">${formatNumber(kpis.predicted_passed_eol)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Predicted EoL <= 365d (1)</div><div class="kpi-value">${formatNumber(kpis.predicted_within_365)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Predicted EoL > 365d (0)</div><div class="kpi-value">${formatNumber(kpis.predicted_gt_365)}</div></div>
+    <div class="kpi-card"><div class="kpi-label">Predicted At-Risk Share</div><div class="kpi-value">${formatPercent(kpis.predicted_risk_rate)}</div></div>
+  `;
+}
+
+function renderInferenceClassMix(classMix) {
+  if (!window.Plotly) {
+    setVizEmpty('viz-inference-class-mix', 'Plotly unavailable for this visualization.');
+    return;
+  }
+  if (!classMix || classMix.length === 0) {
+    setVizEmpty('viz-inference-class-mix', 'No class mix data available.');
+    return;
+  }
+
+  const labels = classMix.map((row) => row.label);
+  const values = classMix.map((row) => Number(row.count || 0));
+  const colors = ['#d1495b', '#f2c14e', '#2a9d50'];
+
+  Plotly.newPlot(
+    'viz-inference-class-mix',
+    [
+      {
+        type: 'pie',
+        labels,
+        values,
+        textinfo: 'label+percent',
+        hole: 0.42,
+        marker: { colors, line: { color: '#ffffff', width: 1 } },
+        hovertemplate: '%{label}<br>Count: %{value:,}<br>Share: %{percent}<extra></extra>',
+      },
+    ],
+    {
+      margin: { l: 10, r: 10, t: 8, b: 8 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      height: 320,
+      showlegend: false,
+    },
+    { displayModeBar: false, responsive: true },
+  );
+}
+
+function renderInferenceModelRisk(rows) {
+  if (!window.Plotly) {
+    setVizEmpty('viz-inference-model-risk', 'Plotly unavailable for this visualization.');
+    return;
+  }
+  if (!rows || rows.length === 0) {
+    setVizEmpty('viz-inference-model-risk', 'No model-level inference data available.');
+    return;
+  }
+
+  const dataRows = [...rows].reverse();
+  Plotly.newPlot(
+    'viz-inference-model-risk',
+    [
+      {
+        type: 'bar',
+        orientation: 'h',
+        y: dataRows.map((row) => row.device_model),
+        x: dataRows.map((row) => Number(row.predicted_risk_devices || 0)),
+        marker: { color: '#8d3fbc' },
+        text: dataRows.map(
+          (row) =>
+            `Total: ${formatNumber(row.total_devices)} | Passed EoL: ${formatNumber(row.predicted_passed_eol)} | Within 365d: ${formatNumber(row.predicted_within_365)}`,
+        ),
+        hovertemplate: '%{y}<br>Predicted At-Risk: %{x:,}<br>%{text}<extra></extra>',
+      },
+    ],
+    {
+      margin: { l: 110, r: 12, t: 8, b: 35 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: '#ffffff',
+      xaxis: { title: 'Predicted At-Risk Count', gridcolor: '#e3ebe5' },
+      yaxis: { automargin: true },
+      height: 360,
+    },
+    { displayModeBar: false, responsive: true },
+  );
+}
+
+function renderInferences(payload) {
+  if (inferencesNote) {
+    inferencesNote.textContent =
+      payload.note || 'Model performance and predicted behavior for unknown-EoL devices.';
+  }
+
+  if (modelPerformanceImage && payload?.artifacts?.model_performance_image) {
+    modelPerformanceImage.src = payload.artifacts.model_performance_image;
+  }
+
+  if (!payload.available) {
+    renderInferencesKpis({});
+    setVizEmpty('viz-inference-class-mix', payload.note || 'No inference data available.');
+    setVizEmpty('viz-inference-model-risk', payload.note || 'No inference data available.');
+    return;
+  }
+
+  renderInferencesKpis(payload.kpis || {});
+  renderInferenceClassMix(payload.class_mix || []);
+  renderInferenceModelRisk(payload.model_risk || []);
+}
+
+async function loadInferences() {
+  const payload = await fetchJson(API.inferences);
+  renderInferences(payload);
+  inferencesLoaded = true;
 }
 
 function clearMarkerHighlight() {

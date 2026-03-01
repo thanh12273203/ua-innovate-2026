@@ -14,6 +14,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / 'data'
 DEVICE_DATASET_CSV = DATA_DIR / 'device_dataset.csv'
 RAW_WORKBOOK = DATA_DIR / 'UAInnovateDataset-SoCo.xlsx'
+UNKNOWN_EOL_PREDICTIONS_CSV = DATA_DIR / 'unknown_eol_device_behavior_predictions.csv'
+DEVICE_BEHAVIOR_PREDICTIONS_CSV = DATA_DIR / 'device_behavior_predictions.csv'
+REPORTS_DIR = PROJECT_ROOT / 'reports'
+MODEL_PERFORMANCE_PNG = REPORTS_DIR / 'model_performance.png'
+LOGS_DIR = PROJECT_ROOT / 'logs'
+RANDOM_FOREST_MODEL_PKL = LOGS_DIR / 'random_forest_model.pkl'
 
 
 def _normalize_text(series: pd.Series) -> pd.Series:
@@ -120,6 +126,49 @@ def _safe_bool(value: Any) -> Optional[bool]:
     if pd.isna(value):
         return None
     return bool(value)
+
+
+@lru_cache(maxsize=1)
+def load_inference_predictions() -> pd.DataFrame:
+    candidate_paths = [UNKNOWN_EOL_PREDICTIONS_CSV, DEVICE_BEHAVIOR_PREDICTIONS_CSV]
+    for csv_path in candidate_paths:
+        if csv_path.exists():
+            frame = pd.read_csv(csv_path, low_memory=False)
+            break
+    else:
+        return pd.DataFrame()
+
+    required = {'predicted_behavior_class'}
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f'Inference predictions CSV missing required columns: {missing}')
+
+    out = frame.copy()
+    out['predicted_behavior_class'] = pd.to_numeric(out['predicted_behavior_class'], errors='coerce')
+    out = out[out['predicted_behavior_class'].isin([-1, 0, 1])].copy()
+    out['predicted_behavior_class'] = out['predicted_behavior_class'].astype(int)
+
+    if 'prediction_confidence' in out.columns:
+        out['prediction_confidence'] = pd.to_numeric(out['prediction_confidence'], errors='coerce')
+    else:
+        out['prediction_confidence'] = pd.NA
+
+    if 'loc_state' in out.columns:
+        out['loc_state'] = _normalize_text(out['loc_state'])
+    else:
+        out['loc_state'] = pd.Series(pd.NA, index=out.index, dtype='string')
+
+    if 'device_model' in out.columns:
+        out['device_model'] = out['device_model'].astype('string').str.strip()
+    else:
+        out['device_model'] = pd.Series(pd.NA, index=out.index, dtype='string')
+
+    if 'device_source' in out.columns:
+        out['device_source'] = out['device_source'].astype('string').str.strip().fillna('NA')
+    else:
+        out['device_source'] = pd.Series('NA', index=out.index, dtype='string')
+
+    return out
 
 
 def get_cluster_payload(state: Optional[str] = None) -> Dict[str, Any]:
@@ -498,4 +547,172 @@ def get_findings_payload(horizon_days: int = 365) -> Dict[str, Any]:
         'state_exposure': state_exposure,
         'source_lifecycle_mix': source_lifecycle_mix,
         'model_hotspots': model_hotspots,
+    }
+
+
+def get_inferences_payload() -> Dict[str, Any]:
+    frame = load_inference_predictions()
+    if frame.empty:
+        return {
+            'available': False,
+            'note': (
+                'No inference prediction file found. Expected '
+                '`data/unknown_eol_device_behavior_predictions.csv` or '
+                '`data/device_behavior_predictions.csv`.'
+            ),
+            'artifacts': {
+                'model_performance_image': '/reports/model_performance.png',
+                'model_performance_exists': MODEL_PERFORMANCE_PNG.exists(),
+                'model_pkl_path': str(RANDOM_FOREST_MODEL_PKL),
+                'model_pkl_exists': RANDOM_FOREST_MODEL_PKL.exists(),
+            },
+            'kpis': {},
+            'class_mix': [],
+            'state_risk': [],
+            'model_risk': [],
+            'source_mix': [],
+            'confidence_distribution': [],
+        }
+
+    total_scored = int(frame.shape[0])
+    passed_count = int((frame['predicted_behavior_class'] == -1).sum())
+    within_count = int((frame['predicted_behavior_class'] == 1).sum())
+    default_count = int((frame['predicted_behavior_class'] == 0).sum())
+    risk_total = passed_count + within_count
+    risk_rate = (risk_total / total_scored) * 100.0 if total_scored > 0 else 0.0
+
+    class_label_map = {
+        -1: 'Likely Passed EoL',
+        1: 'Likely EoL <= 365d',
+        0: 'Likely EoL > 365d',
+    }
+    class_order = [-1, 1, 0]
+    class_mix = []
+    for cls in class_order:
+        count = int((frame['predicted_behavior_class'] == cls).sum())
+        class_mix.append(
+            {
+                'class_id': int(cls),
+                'label': class_label_map[cls],
+                'count': count,
+                'share_pct': (count / total_scored) * 100.0 if total_scored > 0 else 0.0,
+            }
+        )
+
+    frame['is_predicted_risk'] = frame['predicted_behavior_class'].isin([-1, 1])
+
+    state_risk_df = (
+        frame[frame['loc_state'].notna()]
+        .groupby('loc_state', as_index=False)
+        .agg(
+            total_devices=('predicted_behavior_class', 'size'),
+            predicted_risk_devices=('is_predicted_risk', 'sum'),
+            predicted_passed_eol=('predicted_behavior_class', lambda s: int((s == -1).sum())),
+            predicted_within_365=('predicted_behavior_class', lambda s: int((s == 1).sum())),
+        )
+        .sort_values(['predicted_risk_devices', 'predicted_passed_eol', 'total_devices'], ascending=[False, False, False])
+        .head(15)
+        .reset_index(drop=True)
+    )
+    state_risk_df['predicted_risk_rate'] = np.where(
+        state_risk_df['total_devices'] > 0,
+        (state_risk_df['predicted_risk_devices'] / state_risk_df['total_devices']) * 100.0,
+        0.0,
+    )
+    state_risk = [
+        {
+            'state': _safe_str(row.loc_state),
+            'total_devices': _safe_int(row.total_devices),
+            'predicted_risk_devices': _safe_int(row.predicted_risk_devices),
+            'predicted_passed_eol': _safe_int(row.predicted_passed_eol),
+            'predicted_within_365': _safe_int(row.predicted_within_365),
+            'predicted_risk_rate': _safe_float(row.predicted_risk_rate),
+        }
+        for row in state_risk_df.itertuples(index=False)
+    ]
+
+    model_risk_df = (
+        frame[frame['device_model'].notna()]
+        .groupby('device_model', as_index=False)
+        .agg(
+            total_devices=('predicted_behavior_class', 'size'),
+            predicted_risk_devices=('is_predicted_risk', 'sum'),
+            predicted_passed_eol=('predicted_behavior_class', lambda s: int((s == -1).sum())),
+            predicted_within_365=('predicted_behavior_class', lambda s: int((s == 1).sum())),
+        )
+        .sort_values(['predicted_risk_devices', 'predicted_passed_eol', 'total_devices'], ascending=[False, False, False])
+        .head(12)
+        .reset_index(drop=True)
+    )
+    model_risk = [
+        {
+            'device_model': _safe_str(row.device_model),
+            'total_devices': _safe_int(row.total_devices),
+            'predicted_risk_devices': _safe_int(row.predicted_risk_devices),
+            'predicted_passed_eol': _safe_int(row.predicted_passed_eol),
+            'predicted_within_365': _safe_int(row.predicted_within_365),
+        }
+        for row in model_risk_df.itertuples(index=False)
+    ]
+
+    source_mix_df = (
+        frame.groupby('device_source', as_index=False)
+        .agg(
+            total_devices=('predicted_behavior_class', 'size'),
+            predicted_passed_eol=('predicted_behavior_class', lambda s: int((s == -1).sum())),
+            predicted_within_365=('predicted_behavior_class', lambda s: int((s == 1).sum())),
+            predicted_gt_365=('predicted_behavior_class', lambda s: int((s == 0).sum())),
+        )
+        .sort_values('total_devices', ascending=False)
+        .reset_index(drop=True)
+    )
+    source_mix = [
+        {
+            'device_source': _safe_str(row.device_source),
+            'total_devices': _safe_int(row.total_devices),
+            'predicted_passed_eol': _safe_int(row.predicted_passed_eol),
+            'predicted_within_365': _safe_int(row.predicted_within_365),
+            'predicted_gt_365': _safe_int(row.predicted_gt_365),
+        }
+        for row in source_mix_df.itertuples(index=False)
+    ]
+
+    confidence_distribution = []
+    confidence = pd.to_numeric(frame['prediction_confidence'], errors='coerce')
+    confidence = confidence[confidence.notna()]
+    if not confidence.empty:
+        bins = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        labels = ['0.0-0.2', '0.2-0.4', '0.4-0.6', '0.6-0.8', '0.8-1.0']
+        bucketed = pd.cut(confidence.clip(lower=0.0, upper=1.0), bins=bins, labels=labels, include_lowest=True)
+        bucket_counts = bucketed.value_counts().reindex(labels, fill_value=0)
+        confidence_distribution = [
+            {'bin': str(bin_label), 'count': int(count)}
+            for bin_label, count in bucket_counts.items()
+        ]
+
+    return {
+        'available': True,
+        'note': (
+            'Inference results are generated from unknown-EoL devices and predicted into '
+            'three behavior classes: passed EoL, within 12 months, and beyond 12 months.'
+        ),
+        'artifacts': {
+            'model_performance_image': '/reports/model_performance.png',
+            'model_performance_exists': MODEL_PERFORMANCE_PNG.exists(),
+            'model_pkl_path': str(RANDOM_FOREST_MODEL_PKL),
+            'model_pkl_exists': RANDOM_FOREST_MODEL_PKL.exists(),
+        },
+        'kpis': {
+            'total_scored': total_scored,
+            'predicted_passed_eol': passed_count,
+            'predicted_within_365': within_count,
+            'predicted_gt_365': default_count,
+            'predicted_risk_total': risk_total,
+            'predicted_risk_rate': risk_rate,
+        },
+        'class_mix': class_mix,
+        'state_risk': state_risk,
+        'model_risk': model_risk,
+        'source_mix': source_mix,
+        'confidence_distribution': confidence_distribution,
     }
