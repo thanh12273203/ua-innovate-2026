@@ -1,0 +1,11 @@
+*.pyc
+__pycache__/
+.pytest_cache/
+.vscode/
+checkpoints/
+data/*
+!data/.gitkeep
+docker/*
+venv/*
+AGENTS.md
+*copy*

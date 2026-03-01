@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>UA Innovate Device Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <h1>Network Lifecycle Dashboard</h1>
+        <p>Explore device concentration and lifecycle urgency across U.S. locations.</p>
+      </header>
+
+      <nav class="tabs" aria-label="Dashboard tabs">
+        <button class="tab-button active" data-tab="map-tab">Map</button>
+        <button class="tab-button" data-tab="findings-tab">Findings</button>
+        <button class="tab-button" data-tab="tab-3">Forecasting</button>
+      </nav>
+
+      <main class="tab-panels">
+        <section id="map-tab" class="tab-panel active">
+          <div class="toolbar">
+            <div class="toolbar-block">
+              <span class="kicker">Current Scope</span>
+              <h2 id="scope-title">United States</h2>
+              <p id="scope-subtitle">Click a state to zoom in and filter clusters.</p>
+            </div>
+            <button id="reset-map-btn" class="ghost-btn" disabled>Back to U.S. map</button>
+          </div>
+
+          <div class="map-layout">
+            <div id="us-map" aria-label="U.S. cluster map"></div>
+            <aside class="side-card">
+              <h3>Location Summary</h3>
+              <div id="summary-content">
+                Hover a cluster to view location-level metrics.
+              </div>
+              <div class="legend">
+                <h4>Urgency Color Scale</h4>
+                <div class="gradient"></div>
+                <div class="legend-labels">
+                  <span>Red (Overdue)</span>
+                  <span>Yellow</span>
+                  <span>Green (More runway)</span>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="findings-tab" class="tab-panel findings-panel">
+          <div class="findings-header">
+            <h2>Findings</h2>
+            <p id="findings-note">Lifecycle analytics and risk-cost signals.</p>
+          </div>
+          <div id="findings-kpis" class="kpi-grid"></div>
+          <div class="findings-grid">
+            <section class="viz-card viz-wide">
+              <h3>Top 10 Sites With Most Overdue EoL</h3>
+              <div id="viz-top-overdue" class="viz-frame"></div>
+            </section>
+            <section class="viz-card">
+              <h3>Lifecycle vs Support Coverage, Security Risk, and Cost</h3>
+              <div id="viz-risk-cost" class="viz-frame"></div>
+            </section>
+            <section class="viz-card">
+              <h3>Model Hotspots: Overdue and Cost Pressure</h3>
+              <div id="viz-model-hotspots" class="viz-frame"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="tab-3" class="tab-panel placeholder-panel">
+          <h2>Forecasting</h2>
+          <p>Reserved for scenario planning and lifecycle cost projections.</p>
+        </section>
+      </main>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.2.0/turf.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
