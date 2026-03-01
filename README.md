@@ -54,6 +54,7 @@ Core processing steps:
 - Deduplicate across inventory sources using name matching precedence.
 - Remove inactive NA devices (`Device Status = Inactive`).
 - Exclude NA device types out of scope (`Wireless Controller`, `Firewall`, `Virtual Firewall`, `WirelessLC`).
+- Exclude out-of-scope categories from `ModelData` (`Sec/SD-WAN`, `Sec/Vid`, `Voice`).
 3. Build unified device dataset (`get_device_dataset`):
 - Normalize identities and map each device to location attributes (`state/site code` + `SOLID`/`SOLID-Loc`).
 - Join lifecycle and replacement metadata from `ModelData`.
