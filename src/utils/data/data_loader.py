@@ -117,6 +117,10 @@ def apply_filter(sheets: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
     # Edit the 'Device Type' containing 'Switch' to 'Switch' in the 'NA' sheet
     sheets['NA']['Device Type'] = sheets['NA']['Device Type'].replace(to_replace=r'.*Switch.*', value='Switch', regex=True)
 
+    # Filter out the device categories in the 'ModelData' sheet that are not relevant for analysis
+    print(f"\nNumber of device categories filtered out in 'ModelData' sheet: {sheets['ModelData']['Category'].isin(['Sec/SD-WAN', 'Sec/Vid', 'Voice']).sum()}")
+    sheets['ModelData'] = sheets['ModelData'][~sheets['ModelData']['Category'].isin(['Sec/SD-WAN', 'Sec/Vid', 'Voice'])]
+
     # Add the filtered DataFrames to the new dictionary
     filtered_sheets: Dict[str, pd.DataFrame] = {}
     for sheet_name, df in sheets.items():

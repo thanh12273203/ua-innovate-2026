@@ -143,9 +143,32 @@ Unknown EoL coverage remains high and is itself a planning risk because it weake
 3. Prioritize model families with both high overdue counts and high near-term cost exposure.
 4. Use state/site call-group allocation to stage operational execution capacity.
 
-## Next Phase (Planned)
-Machine learning and optimization are intentionally deferred until data quality and scope are validated.  
-Next step is to assess feasibility for robust predictive modeling and optimization using current feature coverage and label quality.
+## Machine Learning Model for 12-Month Expiry Prediction
+We implemented an initial machine-learning pilot in `notebooks/02_model.ipynb` to classify devices into:
+- `-1`: already passed EoL
+- `1`: expected to expire within 365 days
+- `0`: EoL more than 365 days away
+
+Modeling workflow:
+1. Start from cleaned `data/device_dataset.csv` and keep rows with known EoL labels for supervised training.
+2. Build the 3-class target from `days_to_eol`.
+3. Train a Random Forest classifier with train-only preprocessing and grouped validation logic to reduce leakage.
+4. Evaluate using confusion matrix and ROC/AUC, with additional emphasis on class-wise recall.
+
+Current result:
+- Overall AUC is strong (about **0.875**), but performance is not balanced across classes.
+- The model is much better at predicting class `0` (`EoL > 365`), which is the majority class and generally corresponds to newer platforms.
+- In the current confusion matrix, the model produced **zero predictions for the passed-EoL class** in some runs, which is operationally unacceptable.
+
+Why this happened:
+- The training set has substantial missing EoL values overall, limiting label coverage for supervised learning.
+- Passed-EoL devices include extreme edge cases (for example, devices that are **1,000+ days past EoL**), and these older/rare patterns are underrepresented and harder for the model to learn.
+
+Next improvement direction:
+- Re-balance training and scoring to prioritize recall for passed-EoL first, then within-12-month devices, and only then the default long-runway class.
+- Add feature engineering for older device cohorts and calibration/threshold tuning focused on minority critical classes.
+
+![ML Model Performance](./reports/model_performance.png)
 
 ## Appendix Visuals
 Additional technical visuals available in `reports/`:

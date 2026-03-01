@@ -15,21 +15,4 @@ from .device_visualizations import (
     plot_top_overdue_sites,
     plot_unknown_eol_by_state,
 )
-
-__all__ = [
-    'plot_eol_bucket_distribution',
-    'generate_appendix_visual_suite',
-    'plot_days_to_eol_distribution',
-    'plot_overdue_age_distribution',
-    'plot_top_overdue_sites',
-    'plot_state_exposure',
-    'plot_source_lifecycle_mix',
-    'plot_category_lifecycle_heatmap',
-    'plot_model_hotspots',
-    'plot_lifecycle_risk_cost_scatter',
-    'plot_owner_risk_boxplot',
-    'plot_call_group_backlog',
-    'plot_unknown_eol_by_state',
-    'plot_cost_composition_by_lifecycle_bucket',
-    'plot_site_priority_matrix',
-]
+from .inference import plot_confusion_and_roc
